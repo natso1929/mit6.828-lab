@@ -16,5 +16,4 @@ V = @
 
 # If the makefile cannot find your QEMU binary, uncomment the
 # following line and set it to the full path to QEMU.
-#
-# QEMU=
+# QEMU= /home/6.828/qemu/
