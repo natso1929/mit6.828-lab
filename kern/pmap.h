@@ -69,6 +69,7 @@ void	user_mem_assert(struct Env *env, const void *va, size_t len, int perm);
 static inline physaddr_t
 page2pa(struct PageInfo *pp)
 {
+	// 两个指针相减，为两个指针之间间隔这两个指针类型的数目。 PGSHIFT 正好为一页
 	return (pp - pages) << PGSHIFT;
 }
 
