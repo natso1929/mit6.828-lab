@@ -65,6 +65,7 @@ void	tlb_invalidate(pde_t *pgdir, void *va);
 static inline physaddr_t
 page2pa(struct PageInfo *pp)
 {
+	// 两个指针相减，为两个指针之间间隔这两个指针类型的数目。 PGSHIFT 正好为一页
 	return (pp - pages) << PGSHIFT;
 }
 
