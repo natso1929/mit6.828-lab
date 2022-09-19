@@ -55,7 +55,6 @@ i386_detect_memory(void)
 	// 160
 	npages_basemem = basemem / (PGSIZE / 1024);
 	// cprintf("npages: %d and npages_basemem %d\n",npages, npages_basemem);
-
 	cprintf("Physical memory: %uK available, base = %uK, extended = %uK\n",
 		totalmem, basemem, totalmem - basemem);
 }
@@ -99,6 +98,7 @@ boot_alloc(uint32_t n)
 	if (!nextfree) {
 		extern char end[];
 		nextfree = ROUNDUP((char *) end, PGSIZE);
+		// cprintf("end %p\n", end);
 		// cprintf("end: %p and nextfree %p\n", end, nextfree);
 	}
 	// Allocate a chunk large enough to hold 'n' bytes, then update
@@ -110,11 +110,11 @@ boot_alloc(uint32_t n)
 		return nextfree;
 	} 
 	result = nextfree;
-	nextfree = (ROUNDUP(nextfree + n, PGSIZE));	
-
+	nextfree = ROUNDUP(nextfree + n, PGSIZE);	
+	// cprintf("result %p\n", result);
 	if ((uint32_t)nextfree > KERNBASE + npages * 1024) {
 		panic("out of memory !");
-	};
+	}
 	return result;
 }
 
@@ -138,7 +138,6 @@ mem_init(void)
 
 	// Remove this line when you're ready to test this function.
 	// panic("mem_init: This function is not finished\n");
-
 	//////////////////////////////////////////////////////////////////////
 	// create initial page directory.
 	kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
@@ -152,7 +151,6 @@ mem_init(void)
 
 	// Permissions: kernel R, user R
 	kern_pgdir[PDX(UVPT)] = PADDR(kern_pgdir) | PTE_U | PTE_P;
-
 	//////////////////////////////////////////////////////////////////////
 	// Allocate an array of npages 'struct PageInfo's and store it in 'pages'.
 	// The kernel uses this array to keep track of physical pages: for
@@ -177,6 +175,9 @@ mem_init(void)
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
+	envs = (struct Env*) boot_alloc(NENV *sizeof(struct Env));
+	// cprintf("env %p\n", envs);
+	memset(envs, 0, NENV *sizeof(struct Env));
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -213,6 +214,7 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
+	boot_map_region(kern_pgdir, UENVS, PTSIZE, PADDR(envs), (PTE_U | PTE_P));
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -358,7 +360,7 @@ page_alloc(int alloc_flags)
 	p->pp_link = NULL;
 
 	if (alloc_flags & ALLOC_ZERO) {
-		// WHY 用虚拟地址
+		// WHY 用虚拟地址 因为有mmu硬件做转化！
 		memset(page2kva(p), 0, PGSIZE);
 	}
 	return p;
@@ -641,8 +643,62 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
+	uintptr_t vva = ROUNDDOWN((uintptr_t)va, PGSIZE);
+	uintptr_t end = ROUNDUP((uintptr_t)va + len, PGSIZE);
+	pte_t * pte ;
+	if ((uintptr_t)vva >= ULIM) {
+		user_mem_check_addr = (uintptr_t)va;
+		return -E_FAULT;
+	}
 
+	while (vva < end) {
+		if ((pte = pgdir_walk(env->env_pgdir, (void *)vva, 0)) == NULL) {
+			return -E_FAULT;
+		}
+		if (!(*pte & PTE_P) || (*pte & perm) != perm) {
+			if (vva < (uintptr_t)va) {
+				user_mem_check_addr = (uintptr_t)va;
+			} else {
+				user_mem_check_addr = vva;
+			}
+			return -E_FAULT;
+		}
+		vva += PGSIZE;
+
+	}
 	return 0;
+
+
+	// pte_t * pte;
+    // void * aligned_addr, *aligned_end;
+
+    // aligned_addr = ROUNDDOWN((void *)va, PGSIZE);
+    // aligned_end = ROUNDUP((void *)(va + len), PGSIZE);
+
+    // if (aligned_addr >= (void *)ULIM)
+    // {
+    //     user_mem_check_addr = (uintptr_t)va;
+    //     return -E_FAULT;
+    // }
+
+    // for (; aligned_addr < aligned_end; aligned_addr += PGSIZE) {
+    //     pte = pgdir_walk(env->env_pgdir, aligned_addr, 0);
+    //     if (!pte || !(*pte & PTE_P) || (*pte & perm) != perm)
+    //     {
+    //         if (aligned_addr < va)
+    //         {
+    //             user_mem_check_addr = (uintptr_t)va;
+    //         }
+    //         else
+    //         {
+    //             user_mem_check_addr = (uintptr_t)aligned_addr;
+    //         }
+            
+    //         return -E_FAULT;
+    //     }
+    // }
+
+	// return 0;
 }
 
 //
@@ -659,6 +715,7 @@ user_mem_assert(struct Env *env, const void *va, size_t len, int perm)
 		cprintf("[%08x] user_mem_check assertion failure for "
 			"va %08x\n", env->env_id, user_mem_check_addr);
 		env_destroy(env);	// may not return
+		// cprintf("here?\n");
 	}
 }
 

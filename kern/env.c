@@ -116,7 +116,14 @@ env_init(void)
 {
 	// Set up envs array
 	// LAB 3: Your code here.
-
+	struct Env *env;
+	for (env = &envs[NENV - 1]; env >= envs; --env) {
+		// 初始化 不用free
+		// env->env_status = ENV_FREE;
+		env->env_id = 0;
+		env->env_link = env_free_list;
+		env_free_list = env;
+	}
 	// Per-CPU part of the initialization
 	env_init_percpu();
 }
@@ -179,11 +186,19 @@ env_setup_vm(struct Env *e)
 	//    - The functions in kern/pmap.h are handy.
 
 	// LAB 3: Your code here.
+	e->env_pgdir = (pte_t *) page2kva(p);
+	// struct PageInfo * p1 = pa2page(PADDR(e->env_pgdir));
+	p->pp_ref++;
+
+	// 怎么as a template？ 每个进程的地址空间上的内核虚拟地址映射都是一样的
+	// 这里跟xv6 就有点区别，xv6 内核地址空间是单独的一个，每个进程还得有自己的
+	// 内核栈
+	memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
 	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
-
+	
 	return 0;
 }
 
@@ -267,6 +282,18 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
+	struct PageInfo* p;
+	uintptr_t start = (uintptr_t) ROUNDDOWN(va, PGSIZE);
+	uintptr_t end = (uintptr_t) ROUNDUP((uintptr_t) va + len, PGSIZE);
+	while (start < end) {
+		// why 不归0
+	 	if ((p = page_alloc(0)) == NULL) {
+			panic("alloc fails");
+		}
+		// page_insert 里面有 pte_p 的权限；
+		page_insert(e->env_pgdir, p, (void *) start, PTE_P | PTE_U |PTE_W);
+		start += PGSIZE;
+	}
 }
 
 //
@@ -323,11 +350,39 @@ load_icode(struct Env *e, uint8_t *binary)
 	//  What?  (See env_run() and env_pop_tf() below.)
 
 	// LAB 3: Your code here.
+	struct Proghdr *ph , *eph;
+	struct Elf * elf = (struct Elf *) binary;
+	if (elf->e_magic != ELF_MAGIC)
+		panic("binary is not elf file");
+	
+	// 这里要使用e 进程的页表，因为 memset 与 memcpy 会访问内存，mmu
+	// 翻译通过页表翻译，而 region_alloc 使用的是e的页表，而且是cr3是
+	// 指向kern_pgdir，里面没有 ph.p_va的翻译，所以here？都过不去
+	lcr3(PADDR(e->env_pgdir));
+	ph = (struct Proghdr *) ((uint8_t *)elf + elf->e_phoff);
+	eph = ph + elf->e_phnum;
+	for (; ph < eph; ph++) {
+		if (ph->p_type != ELF_PROG_LOAD) 
+			continue;
+		if (ph->p_filesz > ph->p_memsz) 
+			panic("filesz should <= memsz");
+		region_alloc(e, (void *) ph->p_va, ph->p_memsz);
+		// memsz >= filesz 所以先全填0， 然后 把filesz copy 进来
+		memset((void *)ph->p_va, 0, ph->p_memsz);
+// cprintf("here?\n");
+		memcpy((void *)ph->p_va, binary +  ph->p_offset, ph->p_filesz);
+		// 或者 做 memsz - filesz的差值，因为多出的部分就是.bss
+		// memset((void *)ph->p_va + ph->p_filesz, 0, ph->p_memsz - ph->p_filesz);
 
+	}
+	e->env_tf.tf_eip = elf->e_entry;
+	// cprintf("elf->e_entry: %p\n",elf->e_entry);
 	// Now map one page for the program's initial stack
 	// at virtual address USTACKTOP - PGSIZE.
-
 	// LAB 3: Your code here.
+
+	region_alloc(e, (uint32_t *)(USTACKTOP - PGSIZE), PGSIZE);
+	lcr3(PADDR(kern_pgdir));
 }
 
 //
@@ -341,6 +396,11 @@ void
 env_create(uint8_t *binary, enum EnvType type)
 {
 	// LAB 3: Your code here.
+	struct Env * env;
+	int r = env_alloc(&env, 0);
+	// cprintf("r: %e\n", r);
+	load_icode(env, binary);
+	env->env_type = type;
 }
 
 //
@@ -457,7 +517,34 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
-
-	panic("env_run not yet implemented");
+	// 这里跟xv6 有点不同 xv6 调度程序 
+	if (curenv) {
+		if (curenv->env_status == ENV_RUNNING) {
+			curenv->env_status = ENV_RUNNABLE;
+		}
+	}
+	// curenv->env_status == ENV_RUNNABLE;
+	curenv = e;
+	curenv->env_status == ENV_RUNNING;
+	curenv->env_runs++;
+	lcr3(PADDR(curenv->env_pgdir));
+	env_pop_tf(&curenv->env_tf);
+	// if (curenv && curenv->env_status == ENV_RUNNING) {
+	// 	if (e->env_status == ENV_RUNNABLE) {
+	// 		e->env_status = ENV_RUNNING;
+	// 		curenv->env_status == ENV_RUNNABLE;
+	// 		curenv = e;
+	// 		curenv->env_runs++;
+	// 		lcr3(PADDR(curenv->env_pgdir));
+	// 		env_pop_tf(&curenv->env_tf);
+	// 	}
+	// } else {
+	// 	curenv = e;
+	// 	curenv->env_status = ENV_RUNNING;
+	// 	curenv->env_runs++;
+	// 	lcr3(PADDR(curenv->env_pgdir));
+	// 	env_pop_tf(&curenv->env_tf);
+	// }
+	// panic("env_run not yet implemented");
 }
 

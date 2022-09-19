@@ -59,14 +59,101 @@ static const char *trapname(int trapno)
 }
 
 
-void
+void 
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
-
 	// LAB 3: Your code here.
+	void handler0();
+    void handler1();
+    void handler2();
+    void handler3();
+    void handler4();
+    void handler5();
+    void handler6();
+    void handler7();
+    void handler8();
 
-	// Per-CPU setup 
+    void handler10();
+    void handler11();
+    void handler12();
+    void handler13();
+    void handler14();
+
+    void handler16();
+    void handler17();
+    void handler18();
+    void handler19();
+
+    void handler_syscall();
+
+
+    SETGATE(idt[0], 0, GD_KT, handler0, 0);
+    SETGATE(idt[1], 0, GD_KT, handler1, 0);
+    SETGATE(idt[2], 0, GD_KT, handler2, 0);
+    SETGATE(idt[3], 0, GD_KT, handler3, 3);
+    SETGATE(idt[4], 0, GD_KT, handler4, 0);
+    SETGATE(idt[5], 0, GD_KT, handler5, 0);
+    SETGATE(idt[6], 0, GD_KT, handler6, 0);
+    SETGATE(idt[7], 0, GD_KT, handler7, 0);
+    SETGATE(idt[8], 0, GD_KT, handler8, 0);
+
+    SETGATE(idt[10], 0, GD_KT, handler10, 0);
+    SETGATE(idt[11], 0, GD_KT, handler11, 0);
+    SETGATE(idt[12], 0, GD_KT, handler12, 0);
+    SETGATE(idt[13], 0, GD_KT, handler13, 0);
+    SETGATE(idt[14], 0, GD_KT, handler14, 0);
+
+    SETGATE(idt[16], 0, GD_KT, handler16, 0);
+    SETGATE(idt[17], 0, GD_KT, handler17, 0);
+    SETGATE(idt[18], 0, GD_KT, handler18, 0);
+    SETGATE(idt[19], 0, GD_KT, handler19, 0);
+
+	SETGATE(idt[T_SYSCALL], 0, GD_KT, handler_syscall, 3);
+	// 就很奇怪 
+	// void divide_error();
+	// void debug_exception();
+	// void non_maskable();
+	// void break_point();
+	// void over_flow();
+	// void bounds_check();
+	// void illegal_opcode();
+	// void device_not_available();
+	// void double_fault();
+	// void invalid_task_switch_segment();
+	// void segment_not_present();
+	// void stack_exception();
+	// void general_protection_fault();
+	// void page_fault();
+	// void floating_point_error();
+	// void aligment_check();
+	// void machine_check();
+	// void SIMD_floating_point_error();
+	// void system_call();
+
+	// SETGATE(idt[T_DIVIDE], 0, GD_KT, divide_error, 0);
+	// SETGATE(idt[T_DEBUG], 0, GD_KT, debug_exception, 0);
+	// SETGATE(idt[T_NMI], 0, GD_KT, non_maskable, 0);
+	// // 下面不能用 breakpoint 可以点进去看看， 已经被定义了
+	// // SETGATE(idt[T_BRKPT], 0, GD_KT, breakpoint, 0);
+	// SETGATE(idt[T_BRKPT], 0, GD_KT, break_point, 0);
+	// SETGATE(idt[T_OFLOW], 0, GD_KT, over_flow, 0);
+	// SETGATE(idt[T_BOUND], 0, GD_KT, bounds_check, 0);
+	// SETGATE(idt[T_ILLOP], 0, GD_KT, illegal_opcode, 0);
+	// SETGATE(idt[T_DEVICE], 0, GD_KT, device_not_available, 0);
+	// SETGATE(idt[T_DBLFLT], 0, GD_KT, double_fault, 0);
+	// SETGATE(idt[T_TSS], 0, GD_KT, invalid_task_switch_segment, 0);
+	// SETGATE(idt[T_SEGNP], 0, GD_KT, segment_not_present, 0);
+	// SETGATE(idt[T_STACK], 0, GD_KT, stack_exception, 0);
+	// SETGATE(idt[T_GPFLT], 0, GD_KT, general_protection_fault, 0);
+	// SETGATE(idt[T_PGFLT], 0, GD_KT, page_fault, 0);
+	// SETGATE(idt[T_FPERR], 0, GD_KT, floating_point_error, 0);
+	// SETGATE(idt[T_ALIGN], 0, GD_KT, aligment_check, 0);
+	// SETGATE(idt[T_MCHK], 0, GD_KT, machine_check, 0);
+	// SETGATE(idt[T_SIMDERR], 0, GD_KT, SIMD_floating_point_error, 0);
+	// SETGATE(idt[T_SYSCALL], 0, GD_KT, system_call, 3);
+
+	// Per-CPU setup
 	trap_init_percpu();
 }
 
@@ -82,7 +169,7 @@ trap_init_percpu(void)
 
 	// Initialize the TSS slot of the gdt.
 	gdt[GD_TSS0 >> 3] = SEG16(STS_T32A, (uint32_t) (&ts),
-					sizeof(struct Taskstate) - 1, 0);
+							  sizeof(struct Taskstate) - 1, 0);
 	gdt[GD_TSS0 >> 3].sd_s = 0;
 
 	// Load the TSS selector (like other segment selectors, the
@@ -93,7 +180,7 @@ trap_init_percpu(void)
 	lidt(&idt_pd);
 }
 
-void
+void 
 print_trapframe(struct Trapframe *tf)
 {
 	cprintf("TRAP frame at %p\n", tf);
@@ -112,9 +199,9 @@ print_trapframe(struct Trapframe *tf)
 	// PR=a protection violation caused the fault (NP=page not present).
 	if (tf->tf_trapno == T_PGFLT)
 		cprintf(" [%s, %s, %s]\n",
-			tf->tf_err & 4 ? "user" : "kernel",
-			tf->tf_err & 2 ? "write" : "read",
-			tf->tf_err & 1 ? "protection" : "not-present");
+				tf->tf_err & 4 ? "user" : "kernel",
+				tf->tf_err & 2 ? "write" : "read",
+				tf->tf_err & 1 ? "protection" : "not-present");
 	else
 		cprintf("\n");
 	cprintf("  eip  0x%08x\n", tf->tf_eip);
@@ -126,7 +213,7 @@ print_trapframe(struct Trapframe *tf)
 	}
 }
 
-void
+void 
 print_regs(struct PushRegs *regs)
 {
 	cprintf("  edi  0x%08x\n", regs->reg_edi);
@@ -144,23 +231,44 @@ trap_dispatch(struct Trapframe *tf)
 {
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
-
-	// Unexpected trap: The user process or the kernel has a bug.
-	print_trapframe(tf);
-	if (tf->tf_cs == GD_KT)
-		panic("unhandled trap in kernel");
-	else {
-		env_destroy(curenv);
+	if (tf->tf_trapno == T_PGFLT) {
+		page_fault_handler(tf);
+		return ;
+	}
+	else if (tf->tf_trapno == T_BRKPT) {
+		monitor(tf);
 		return;
 	}
+	else if(tf->tf_trapno == T_SYSCALL) {
+		cprintf("syscall\n");
+		tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax, 
+				tf->tf_regs.reg_edx,
+				tf->tf_regs.reg_ecx,
+				tf->tf_regs.reg_ebx,
+				tf->tf_regs.reg_edi,
+				tf->tf_regs.reg_esi
+				);
+		cprintf("eax %d\n", tf->tf_regs.reg_eax);
+		cprintf("status %d\n", curenv->env_status);
+		return ;
+	}
+		print_trapframe(tf);
+		if (tf->tf_cs == GD_KT)
+			panic("unhandled trap in kernel");
+		else
+		{
+			env_destroy(curenv);
+			return;
+		}
+		
 }
 
-void
-trap(struct Trapframe *tf)
+void trap(struct Trapframe *tf)
 {
 	// The environment may have set DF and some versions
 	// of GCC rely on DF being clear
-	asm volatile("cld" ::: "cc");
+	asm volatile("cld" ::
+					 : "cc");
 
 	// Check that interrupts are disabled.  If this assertion
 	// fails, DO NOT be tempted to fix it by inserting a "cli" in
@@ -169,7 +277,10 @@ trap(struct Trapframe *tf)
 
 	cprintf("Incoming TRAP frame at %p\n", tf);
 
-	if ((tf->tf_cs & 3) == 3) {
+	cprintf("status %d\n", curenv->env_status);
+	if ((tf->tf_cs & 3) == 3)
+	{
+
 		// Trapped from user mode.
 		assert(curenv);
 
@@ -179,6 +290,9 @@ trap(struct Trapframe *tf)
 		curenv->env_tf = *tf;
 		// The trapframe on the stack should be ignored from here on.
 		tf = &curenv->env_tf;
+	} 
+	if ((tf->tf_cs & 3) == 0) {
+		panic("a page fault happens in kernel mode.");
 	}
 
 	// Record that tf is the last real trapframe so
@@ -189,13 +303,11 @@ trap(struct Trapframe *tf)
 	trap_dispatch(tf);
 
 	// Return to the current environment, which should be running.
-	assert(curenv && curenv->env_status == ENV_RUNNING);
+	// assert(curenv && curenv->env_status == ENV_RUNNING);
 	env_run(curenv);
 }
 
-
-void
-page_fault_handler(struct Trapframe *tf)
+void page_fault_handler(struct Trapframe *tf)
 {
 	uint32_t fault_va;
 
@@ -205,14 +317,13 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	// LAB 3: Your code here.
-
+	
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
 
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
-		curenv->env_id, fault_va, tf->tf_eip);
+			curenv->env_id, fault_va, tf->tf_eip);
 	print_trapframe(tf);
 	env_destroy(curenv);
 }
-
