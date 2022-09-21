@@ -72,31 +72,27 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	// LAB 3: Your code here.
 
 	// panic("syscall not implemented");
-	int32_t num;
-	cprintf("syscall kern\n");
-	cprintf("%d\n",syscallno);
+	// cprintf("syscall kern\n");
 	switch (syscallno) {
 		case SYS_cputs:
-			sys_cputs((char*)a1, (size_t)a2);
-			num = 0;
-			break;
+			sys_cputs((const char *)a1, (size_t)a2);
+			return 0;
+
 		case SYS_cgetc:
-			num = sys_cgetc();
-			break;
+			return sys_cgetc();
+
 		case SYS_getenvid:
-			num = sys_getenvid();
-			break;
+			return sys_getenvid();
+
 		case SYS_env_destroy:
-			num = sys_env_destroy((envid_t)a1);
-			break;
+			return sys_env_destroy((envid_t)a1);
+
 		case NSYSCALLS:
-			num = 0;
-			break;
+			return 0;
+
 		default:
 			return -E_INVAL;
 	}
-	cprintf("num %d\n",num);
-	return num;
 }
 
 	

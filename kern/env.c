@@ -119,7 +119,7 @@ env_init(void)
 	struct Env *env;
 	for (env = &envs[NENV - 1]; env >= envs; --env) {
 		// 初始化 不用free
-		// env->env_status = ENV_FREE;
+		env->env_status = ENV_FREE;
 		env->env_id = 0;
 		env->env_link = env_free_list;
 		env_free_list = env;
@@ -236,6 +236,8 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	e->env_status = ENV_RUNNABLE;
 	e->env_runs = 0;
 
+cprintf("e %d in env_create\n", e->env_status);
+
 	// Clear out all the saved register state,
 	// to prevent the register values
 	// of a prior environment inhabiting this Env structure
@@ -262,6 +264,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	*newenv_store = e;
 
 	cprintf("[%08x] new env %08x\n", curenv ? curenv->env_id : 0, e->env_id);
+
 	return 0;
 }
 
@@ -401,6 +404,8 @@ env_create(uint8_t *binary, enum EnvType type)
 	// cprintf("r: %e\n", r);
 	load_icode(env, binary);
 	env->env_type = type;
+cprintf("env_status %p in env_create\n", env->env_status);
+
 }
 
 //
@@ -525,26 +530,12 @@ env_run(struct Env *e)
 	}
 	// curenv->env_status == ENV_RUNNABLE;
 	curenv = e;
-	curenv->env_status == ENV_RUNNING;
+	// 我想笑了 找了半天错误 还注释了trap.c中的这句话过了lab3做lab4	assert(curenv && curenv->env_status == ENV_RUNNING); 后面lab4 又卡半天，应该也是这个问题，还没试；
+	// curenv->env_status == ENV_RUNNING;
+	curenv->env_status = ENV_RUNNING;
 	curenv->env_runs++;
 	lcr3(PADDR(curenv->env_pgdir));
 	env_pop_tf(&curenv->env_tf);
-	// if (curenv && curenv->env_status == ENV_RUNNING) {
-	// 	if (e->env_status == ENV_RUNNABLE) {
-	// 		e->env_status = ENV_RUNNING;
-	// 		curenv->env_status == ENV_RUNNABLE;
-	// 		curenv = e;
-	// 		curenv->env_runs++;
-	// 		lcr3(PADDR(curenv->env_pgdir));
-	// 		env_pop_tf(&curenv->env_tf);
-	// 	}
-	// } else {
-	// 	curenv = e;
-	// 	curenv->env_status = ENV_RUNNING;
-	// 	curenv->env_runs++;
-	// 	lcr3(PADDR(curenv->env_pgdir));
-	// 	env_pop_tf(&curenv->env_tf);
-	// }
-	// panic("env_run not yet implemented");
+
 }
 

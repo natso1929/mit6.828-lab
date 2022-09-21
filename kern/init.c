@@ -34,7 +34,6 @@ i386_init(void)
 	// Lab 3 user environment initialization functions
 	env_init();
 	trap_init();
-
 #if defined(TEST)
 	// Don't touch -- used by grading script!
 	ENV_CREATE(TEST, ENV_TYPE_USER);
@@ -42,8 +41,8 @@ i386_init(void)
 	// Touch all you want.
 	ENV_CREATE(user_hello, ENV_TYPE_USER);
 #endif // TEST*
-
 	// We only have one user environment for now, so just run it.
+cprintf("env[0] env_status %p in init\n", envs[0].env_status);
 	env_run(&envs[0]);
 }
 
