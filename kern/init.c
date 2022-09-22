@@ -42,7 +42,7 @@ i386_init(void)
 	ENV_CREATE(user_hello, ENV_TYPE_USER);
 #endif // TEST*
 	// We only have one user environment for now, so just run it.
-cprintf("env[0] env_status %p in init\n", envs[0].env_status);
+// cprintf("env[0] env_status %p in init\n", envs[0].env_status);
 	env_run(&envs[0]);
 }
 
