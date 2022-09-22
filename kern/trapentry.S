@@ -46,11 +46,60 @@
 
 /*
  * Lab 3: Your code here for generating entry points for the different traps.
+ TRAPHANDLER_NOEC(divide_error, T_DIVIDE)
+ TRAPHANDLER_NOEC(debug_exception, T_DEBUG)
+ TRAPHANDLER_NOEC(non_maskable, T_NMI)
+ TRAPHANDLER_NOEC(break_point, T_BRKPT)
+ TRAPHANDLER_NOEC(over_flow, T_OFLOW )
+ TRAPHANDLER_NOEC(bounds_check, T_BOUND )
+ TRAPHANDLER_NOEC(illegal_opcode, T_ILLOP )
+ TRAPHANDLER_NOEC(device_not_available, T_DEVICE)
+ TRAPHANDLER(double_fault, T_DBLFLT)
+ TRAPHANDLER(invalid_task_switch_segment, T_TSS  )
+ TRAPHANDLER(segment_not_present, T_SEGNP)
+ TRAPHANDLER(stack_exception, T_STACK)
+ TRAPHANDLER(general_protection_fault, T_GPFLT)
+ TRAPHANDLER(page_fault, T_PGFLT)
+ TRAPHANDLER_NOEC(floating_point_error, T_FPERR  )
+ TRAPHANDLER(aligment_check, T_ALIGN  )
+ TRAPHANDLER_NOEC(machine_check, T_MCHK   )
+ TRAPHANDLER_NOEC(SIMD_floating_point_error, T_SIMDERR)
+ TRAPHANDLER_NOEC(system_call, T_SYSCALL)
  */
-
+TRAPHANDLER_NOEC(handler_divide, T_DIVIDE)
+TRAPHANDLER_NOEC(handler_debug, T_DEBUG)
+TRAPHANDLER_NOEC(handler_nmi, T_NMI)
+TRAPHANDLER_NOEC(handler_brkpt, T_BRKPT)
+TRAPHANDLER_NOEC(handler_oflow, T_OFLOW)
+TRAPHANDLER_NOEC(handler_bound, T_BOUND)
+TRAPHANDLER_NOEC(handler_illop, T_ILLOP)
+TRAPHANDLER_NOEC(handler_device, T_DEVICE)
+TRAPHANDLER(handler_dblflt, T_DBLFLT)
+TRAPHANDLER(handler_tss, T_TSS)
+TRAPHANDLER(handler_segnp, T_SEGNP)
+TRAPHANDLER(handler_stack, T_STACK)
+TRAPHANDLER(handler_gpflt, T_GPFLT)
+TRAPHANDLER(handler_pgflt, T_PGFLT)
+TRAPHANDLER_NOEC(handler_fperr, T_FPERR)
+TRAPHANDLER(handler_align, T_ALIGN)
+TRAPHANDLER_NOEC(handler_mchk, T_MCHK)
+TRAPHANDLER_NOEC(handler_simderr, T_SIMDERR)
+TRAPHANDLER_NOEC(handler_syscall, T_SYSCALL)
+TRAPHANDLER_NOEC(handler_default, T_DEFAULT)
 
 
 /*
  * Lab 3: Your code here for _alltraps
  */
+_alltraps:
+
+pushl %ds; /* 从trapframe结构体的提示 */
+pushl %es;
+pushal;
+
+movw $GD_KD, %ax;
+movw %ax, %ds; /* 立即数不能直接放入段寄存器里面 */
+movw %ax, %es;
+pushl %esp;
+call trap
 
