@@ -89,11 +89,12 @@ envid2env(envid_t envid, struct Env **env_store, bool checkperm)
 	// (i.e., does not refer to a _previous_ environment
 	// that used the same slot in the envs[] array).
 	e = &envs[ENVX(envid)];
+// cprintf("envid %d in 2env\n", envid);
 	if (e->env_status == ENV_FREE || e->env_id != envid) {
+// cprintf("status %d\n",e->env_status);
 		*env_store = 0;
 		return -E_BAD_ENV;
 	}
-
 	// Check that the calling environment has legitimate permission
 	// to manipulate the specified environment.
 	// If checkperm is set, the specified environment
@@ -239,7 +240,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	e->env_status = ENV_RUNNABLE;
 	e->env_runs = 0;
 
-cprintf("e %d in env_create\n", e->env_status);
+// cprintf("e %d in env_create\n", e->env_status);
 
 	// Clear out all the saved register state,
 	// to prevent the register values
@@ -264,7 +265,7 @@ cprintf("e %d in env_create\n", e->env_status);
 
 	// Enable interrupts while in user mode.
 	// LAB 4: Your code here.
-
+	// e->env_tf.tf_eflags |= FL_IF;
 	// Clear the page fault handler until user installs one.
 	e->env_pgfault_upcall = 0;
 
@@ -302,7 +303,7 @@ region_alloc(struct Env *e, void *va, size_t len)
 	uintptr_t end = (uintptr_t) ROUNDUP((uintptr_t) va + len, PGSIZE);
 	while (start < end) {
 		// why 不归0
-	 	if ((p = page_alloc(0)) == NULL) {
+	 	if ((p = page_alloc(1)) == NULL) {
 			panic("alloc fails");
 		}
 		// page_insert 里面有 pte_p 的权限；
@@ -549,10 +550,8 @@ env_run(struct Env *e)
 
 	// LAB 3: Your code here.
 	// 这里跟xv6 有点不同 xv6 调度程序 
-	if (curenv) {
-		if (curenv->env_status == ENV_RUNNING) {
-			curenv->env_status = ENV_RUNNABLE;
-		}
+	if (curenv != NULL && curenv->env_status == ENV_RUNNING) {
+		curenv->env_status = ENV_RUNNABLE;
 	}
 	// curenv->env_status == ENV_RUNNABLE;
 	curenv = e;
@@ -561,6 +560,7 @@ env_run(struct Env *e)
 	curenv->env_status = ENV_RUNNING;
 	curenv->env_runs++;
 	lcr3(PADDR(curenv->env_pgdir));
+	unlock_kernel();
 	env_pop_tf(&curenv->env_tf);
 
 }

@@ -25,7 +25,10 @@ pgfault(struct UTrapframe *utf)
 	//   (see <inc/memlayout.h>).
 
 	// LAB 4: Your code here.
-
+	// pde 不能用 uvpd[PDX(addr)]
+	// pte_t pde = uvpd[PDX(addr)];
+	if(!((err & FEC_WR) && (uvpt[PGNUM(addr)] & PTE_COW)))
+		panic("fault page is not write or copy-on-write page");
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
 	// page to the old page's address.
@@ -33,8 +36,14 @@ pgfault(struct UTrapframe *utf)
 	//   You should make three system calls.
 
 	// LAB 4: Your code here.
-
-	panic("pgfault not implemented");
+	if ((r = sys_page_alloc(0, PFTEMP, PTE_P | PTE_W | PTE_U)) < 0)
+		panic("allocating at %x in page fault handler: %e", addr, r);
+	addr = ROUNDDOWN(addr, PGSIZE);
+	memcpy((void *)PFTEMP, (void *)addr, PGSIZE);
+	// why 0,0
+	sys_page_map(0, (void *)PFTEMP, 0, addr, PTE_U | PTE_W |PTE_P);
+	// sys_page_map(sys_getenvid(), addr, 0, PFTEMP, PTE_P | PTE_W |PTE_U);
+	sys_page_unmap(0, (void *)PFTEMP);
 }
 
 //
@@ -52,9 +61,19 @@ static int
 duppage(envid_t envid, unsigned pn)
 {
 	int r;
-
 	// LAB 4: Your code here.
-	panic("duppage not implemented");
+	pte_t pte = uvpt[pn];
+	if ((pte & PTE_W) || (pte & PTE_COW)) {
+		pte &= ~PTE_W;
+		pte |= PTE_COW;
+	}
+// cprintf("envid %d\n", envid);
+	if ((r = sys_page_map(0, (void *)(pn * PGSIZE), envid, (void *)(pn * PGSIZE), PTE_COW |PTE_P |PTE_U)) < 0) {
+		panic("sys_page_map: %e", r);
+	}
+	// 为什么是0， 0，  就是简单的更新一下 特权
+	if ((r = sys_page_map(0, (void *)(pn * PGSIZE), 0, (void *)(pn * PGSIZE), PTE_COW |PTE_P |PTE_U)) < 0) 
+		panic("sys_page_map: %e", r);
 	return 0;
 }
 
@@ -78,7 +97,42 @@ envid_t
 fork(void)
 {
 	// LAB 4: Your code here.
-	panic("fork not implemented");
+	envid_t envid;
+	// pte_t pte, pde;
+	int r = 0;
+	envid = sys_exofork();
+	set_pgfault_handler(pgfault);
+	
+	if (envid < 0) 
+		panic("sys_exofork: %e", envid);
+	if (envid == 0) {
+		thisenv = &envs[ENVX(sys_getenvid())];
+		return 0;
+	}
+// cprintf("envid %d and getenvid %d in fork\n", envid, sys_getenvid());
+	for (int i = PGNUM(UTEXT); i < PGNUM(USTACKTOP); i++) {
+		// 不能用 pte 接收？ 我猜是因为定义uvpt 的时候是 extern volatile pte_t uvpt[]; 所以要显式的给索引i
+		// pde = uvpd[i >> 10];
+		// pte = uvpt[i];
+		if ((uvpd[i >> 10] & PTE_P) && (uvpt[i] & PTE_P)) {
+			if (uvpt[i] & (PTE_W | PTE_COW)) {
+				if ((r = duppage(envid, i)) < 0) 
+					panic("duppage: %e", r);
+			}else {
+				if ((r = sys_page_map(0, (void *)(i * PGSIZE), envid, (void *)(i * PGSIZE), PTE_U |PTE_P)) < 0) 
+					panic("sys_page_map: %e", r);
+			}
+		}
+	}	
+	// 为什么是envid, 因为 envid 是子进程的id啊 整晕了
+	if ((r = sys_page_alloc(envid, (void*) (UXSTACKTOP - PGSIZE), PTE_P|PTE_U|PTE_W)) < 0)
+		panic("sys_page_alloc: %e", r);
+	extern void _pgfault_upcall(void);
+	if ((r = sys_env_set_pgfault_upcall(envid, _pgfault_upcall)) < 0) 
+		panic("fork: sys_env_set_pgfault_upcall failed, %e", r);
+	if ((r = sys_env_set_status(envid, ENV_RUNNABLE)) < 0)
+		panic("sys_env_set_status: %e", r);
+	return envid;
 }
 
 // Challenge!

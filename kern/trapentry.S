@@ -87,6 +87,22 @@ TRAPHANDLER_NOEC(handler_simderr, T_SIMDERR)
 TRAPHANDLER_NOEC(handler_syscall, T_SYSCALL)
 TRAPHANDLER_NOEC(handler_default, T_DEFAULT)
 
+// TRAPHANDLER_NOEC(handler_IRQ0,  IRQ_OFFSET)
+// TRAPHANDLER_NOEC(handler_IRQ1,  IRQ_OFFSET + 1)
+// TRAPHANDLER_NOEC(handler_IRQ2,  IRQ_OFFSET + 2)
+// TRAPHANDLER_NOEC(handler_IRQ3,  IRQ_OFFSET + 3)
+// TRAPHANDLER_NOEC(handler_IRQ4,  IRQ_OFFSET + 4)
+// TRAPHANDLER_NOEC(handler_IRQ5,  IRQ_OFFSET + 5)
+// TRAPHANDLER_NOEC(handler_IRQ6,  IRQ_OFFSET + 6)
+// TRAPHANDLER_NOEC(handler_IRQ7,  IRQ_OFFSET + 7)
+// TRAPHANDLER_NOEC(handler_IRQ8,  IRQ_OFFSET + 8)
+// TRAPHANDLER_NOEC(handler_IRQ9,  IRQ_OFFSET + 9)
+// TRAPHANDLER_NOEC(handler_IRQ10, IRQ_OFFSET + 10)
+// TRAPHANDLER_NOEC(handler_IRQ11, IRQ_OFFSET + 11)
+// TRAPHANDLER_NOEC(handler_IRQ12, IRQ_OFFSET + 12)
+// TRAPHANDLER_NOEC(handler_IRQ13, IRQ_OFFSET + 13)
+// TRAPHANDLER_NOEC(handler_IRQ14, IRQ_OFFSET + 14)
+// TRAPHANDLER_NOEC(handler_IRQ15, IRQ_OFFSET + 15)
 
 /*
  * Lab 3: Your code here for _alltraps
@@ -100,6 +116,6 @@ pushal;
 movw $GD_KD, %ax;
 movw %ax, %ds; /* 立即数不能直接放入段寄存器里面 */
 movw %ax, %es;
-pushl %esp;
+pushl %esp // 压入当前esp 我猜是在trap函数中 好使用 trapframe指针
 call trap
 

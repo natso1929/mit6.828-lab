@@ -33,7 +33,7 @@
 .globl _pgfault_upcall
 _pgfault_upcall:
 	// Call the C page fault handler.
-	pushl %esp			// function argument: pointer to UTF
+	pushl %esp			// function argument: pointer to UTF 和trapentry一样的操作
 	movl _pgfault_handler, %eax
 	call *%eax
 	addl $4, %esp			// pop function argument
@@ -65,18 +65,46 @@ _pgfault_upcall:
 	// ways as registers become unavailable as scratch space.
 	//
 	// LAB 4: Your code here.
+	// 为什么不能修改esp 换栈 压栈
+	// movl 48(%esp), %eax
+	// movl 40(%esp), %ecx
+	// movl %esp, %edx 
+	// movl %eax, %esp
+	// pushl %ecx
+	// movl %edx, %esp
+
+	movl 40(%esp), %eax // eip
+	sub $4, 48(%esp)	
+	movl 48(%esp), %ecx // esp
+	movl %eax, (%ecx)
 
 	// Restore the trap-time registers.  After you do this, you
-	// can no longer modify any general-purpose registers.
+	// can no longer modify any general-purpose registers. 
 	// LAB 4: Your code here.
-
+	// 想笑了 不知道有popa 这个弹通用寄存器的指令 注意通用寄存器顺序
+	// movl 36(%esp), %eax
+	// movl 32(%esp), %ecx
+	// movl 28(%esp), %edx
+	// movl 24(%esp), %ebx
+	// // movl 20(%esp), %esp
+	// movl 16(%esp), %ebp
+	// movl 12(%esp), %esi
+	// movl 8(%esp), %edi
+	addl $8, %esp
+	popal
+	
 	// Restore eflags from the stack.  After you do this, you can
 	// no longer use arithmetic operations or anything else that
 	// modifies eflags.
 	// LAB 4: Your code here.
+	// movl 44(%esp), %eflags
+	addl $4, %esp
+	popfl
 
 	// Switch back to the adjusted trap-time stack.
 	// LAB 4: Your code here.
-
+	popl %esp
+	// lea -4(%esp), %esp
 	// Return to re-execute the instruction that faulted.
 	// LAB 4: Your code here.
+	ret

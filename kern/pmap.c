@@ -178,7 +178,6 @@ mem_init(void)
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
 	envs = (struct Env*) boot_alloc(NENV *sizeof(struct Env));
-	// cprintf("env %p\n", envs);
 	memset(envs, 0, NENV *sizeof(struct Env));
 
 	//////////////////////////////////////////////////////////////////////
@@ -206,7 +205,7 @@ mem_init(void)
 	// page_insert(kern_pgdir, pages, (uint32_t *)UPAGES, PTE_U |PTE_P);
    	boot_map_region(kern_pgdir, 
                     UPAGES, 
-                    PTSIZE,
+                     npages * sizeof(struct PageInfo),
                     PADDR(pages), 
                     (PTE_U | PTE_P));
 	//////////////////////////////////////////////////////////////////////
@@ -216,7 +215,7 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
-	boot_map_region(kern_pgdir, UENVS, PTSIZE, PADDR(envs), (PTE_U | PTE_P));
+	boot_map_region(kern_pgdir, UENVS, NENV * sizeof(struct Env), PADDR(envs), (PTE_U | PTE_P));
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -292,7 +291,13 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-
+	for (int i = 0; i < NCPU; ++i) {
+		boot_map_region(kern_pgdir,
+						KSTACKTOP - i * (KSTKSIZE + KSTKGAP) - KSTKSIZE,
+						KSTKSIZE,
+						PADDR(percpu_kstacks[i]),
+						PTE_W | PTE_P);
+	}
 }
 
 // --------------------------------------------------------------
@@ -341,6 +346,12 @@ page_init(void)
 			pages[i].pp_link = NULL;
 		}
 		else if (i >= 1 && i < npages_basemem) {
+			if (i == MPENTRY_PADDR / PGSIZE) {
+				// AP bootstrap code
+				pages[i].pp_ref = 1;
+				pages[i].pp_link = NULL;
+				continue;
+			}
 			// cprintf("i:%d in page_init i >= 1 && i < npages_basemem\n", i);
 
 			pages[i].pp_ref = 0;
@@ -356,7 +367,7 @@ page_init(void)
 		else if (i >= (EXTPHYSMEM / PGSIZE) && i < (PADDR(boot_alloc(0)) / PGSIZE)) {
 			// cprintf("(EXTPHYSMEM / PGSIZE): %d and boot(0): %d in 3\n", (EXTPHYSMEM / PGSIZE), PADDR(boot_alloc(0)) / PGSIZE);
 			pages[i].pp_ref = 1;
-			// pages[i].pp_link = NULL;
+			pages[i].pp_link = NULL;
 			// start = PADDR(boot_alloc(0)) / PGSIZE;
 		}
 		 else if (i >= (PADDR(boot_alloc(0)) / PGSIZE) && i < npages){
@@ -473,7 +484,6 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 	// cprintf("pte: %p\n", &pte[PTX(va)]);
 		*pde = page2pa(p) | PTE_P |PTE_U |PTE_W;
 		// pte = &pte[PTX(va)];
-		
 	} else {
 		// 这里为什么用KADDR?  题目要求返回虚拟地址 这种内存布局有点麻烦阿
 		pte = KADDR(PTE_ADDR(*pde));
@@ -511,7 +521,7 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 			// panic("some problem occured!"); 
 			return;
 		}
-		*pte = PTE_ADDR(pa1) | perm;
+		*pte = PTE_ADDR(pa1) | perm | PTE_P;
 		va1 += PGSIZE;
 		pa1 += PGSIZE;
 	}
@@ -577,6 +587,19 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	}
 	*pte = page2pa(pp) | perm  | PTE_P; 
 	pp->pp_ref++;
+	
+	// // If allocation is successful, increase the pp_ref first.
+	// // By doing this before page_remove, we can handle the situation that
+	// // the same pp is re-inserted at the same virtual address in the same pgdir.
+	// pp->pp_ref++;
+	// if ((*pte & PTE_P) == 1) {
+	// 	// If there is a page
+	// 	page_remove(pgdir, va);
+	// }
+	// // Modify permission flags, page directory is also needed
+	// *pte = page2pa(pp) | perm | PTE_P;
+	// *(pgdir + PDX(va)) |= perm;
+
 	return 0;
 }
 
@@ -599,6 +622,7 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 	if ((pte = pgdir_walk(pgdir, va, 0)) == NULL) {
 		return NULL;
 	}
+// cprintf("here\n");
 	physaddr_t ph = PTE_ADDR(*pte);
 	if (pte_store) {
 		// pte_store = &pte; 区别在哪 
@@ -685,7 +709,15 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	size = ROUNDUP(size, PGSIZE);
+	if (base + size > MMIOLIM) {
+		panic("mmio_map_region overflows!");
+	}
+	boot_map_region(kern_pgdir, base, size, pa, PTE_W | PTE_PCD | PTE_PWT);
+	// Return the base of the reserved region
+	uintptr_t curbase = base;
+	base += size;
+	return (void *)curbase;
 }
 
 static uintptr_t user_mem_check_addr;
@@ -719,12 +751,13 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 		user_mem_check_addr = (uintptr_t)va;
 		return -E_FAULT;
 	}
+// cprintf("s:%p vva:%p end:%p in user_mem_check\n", va, vva, end);
 
 	while (vva < end) {
-		if ((pte = pgdir_walk(env->env_pgdir, (void *)vva, 0)) == NULL) {
-			return -E_FAULT;
-		}
-		if (!(*pte & PTE_P) || (*pte & perm) != perm) {
+// cprintf("here in usermemcheck\n");
+		if ((pte = pgdir_walk(env->env_pgdir, (void *)vva, 0)) == NULL 
+			|| !(*pte & PTE_P) || (*pte & perm) != perm) 
+		{
 			if (vva < (uintptr_t)va) {
 				user_mem_check_addr = (uintptr_t)va;
 			} else {
@@ -780,6 +813,8 @@ user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 void
 user_mem_assert(struct Env *env, const void *va, size_t len, int perm)
 {
+// cprintf("s %p\n", va);
+
 	if (user_mem_check(env, va, len, perm | PTE_U) < 0) {
 		cprintf("[%08x] user_mem_check assertion failure for "
 			"va %08x\n", env->env_id, user_mem_check_addr);
