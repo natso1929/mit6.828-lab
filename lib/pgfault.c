@@ -25,14 +25,13 @@ void
 set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 {
 	int r;
-	// cprintf("upcall %p\n", _pgfault_upcall);
 	if (_pgfault_handler == 0) {
 		// First time through!
 		// LAB 4: Your code here.
-		// sys_page_alloc();
-// cprintf("sysenvid %d\n", sys_getenvid());
-		sys_page_alloc(sys_getenvid(),(void *)( UXSTACKTOP - PGSIZE), PTE_P | PTE_U | PTE_W);
-		sys_env_set_pgfault_upcall(sys_getenvid(), _pgfault_upcall);
+		if((r = sys_page_alloc(0, (void *)(UXSTACKTOP - PGSIZE), PTE_P | PTE_U | PTE_W)) < 0) 
+			panic("set_pgfault_hanlder: sys_page_alloc fault!");
+		if ((r = sys_env_set_pgfault_upcall(sys_getenvid(), _pgfault_upcall)) < 0)
+			panic("set_pgfault_hanlder: sys_env_set_pgfault_upcall fault!");
 	}
 
 	// Save handler pointer for assembly to call.

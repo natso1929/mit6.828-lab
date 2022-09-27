@@ -265,7 +265,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 
 	// Enable interrupts while in user mode.
 	// LAB 4: Your code here.
-	// e->env_tf.tf_eflags |= FL_IF;
+	e->env_tf.tf_eflags |= FL_IF;
 	// Clear the page fault handler until user installs one.
 	e->env_pgfault_upcall = 0;
 
@@ -417,7 +417,7 @@ env_create(uint8_t *binary, enum EnvType type)
 	// cprintf("r: %e\n", r);
 	load_icode(env, binary);
 	env->env_type = type;
-cprintf("env_status %p in env_create\n", env->env_status);
+// cprintf("env_status %p in env_create\n", env->env_status);
 
 }
 
@@ -550,13 +550,10 @@ env_run(struct Env *e)
 
 	// LAB 3: Your code here.
 	// 这里跟xv6 有点不同 xv6 调度程序 
-	if (curenv != NULL && curenv->env_status == ENV_RUNNING) {
+	if (curenv && curenv->env_status == ENV_RUNNING) {
 		curenv->env_status = ENV_RUNNABLE;
 	}
-	// curenv->env_status == ENV_RUNNABLE;
 	curenv = e;
-	// 我想笑了 找了半天错误 还注释了trap.c中的这句话过了lab3做lab4	assert(curenv && curenv->env_status == ENV_RUNNING); 后面lab4 又卡半天，应该也是这个问题，还没试；
-	// curenv->env_status == ENV_RUNNING;
 	curenv->env_status = ENV_RUNNING;
 	curenv->env_runs++;
 	lcr3(PADDR(curenv->env_pgdir));

@@ -86,7 +86,7 @@ pgfault(struct UTrapframe *utf)
 	during.eflags = utf->utf_eflags & ~FL_RF;
 	during.esp = utf->utf_esp;
 	check_regs(&before, "before", &during, "during", "in UTrapframe");
-cprintf("here in regs\n");
+// cprintf("here in regs\n");
 
 	// Map UTEMP so the write succeeds
 	if ((r = sys_page_alloc(0, UTEMP, PTE_U|PTE_P|PTE_W)) < 0)

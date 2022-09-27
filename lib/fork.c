@@ -67,7 +67,6 @@ duppage(envid_t envid, unsigned pn)
 		pte &= ~PTE_W;
 		pte |= PTE_COW;
 	}
-// cprintf("envid %d\n", envid);
 	if ((r = sys_page_map(0, (void *)(pn * PGSIZE), envid, (void *)(pn * PGSIZE), PTE_COW |PTE_P |PTE_U)) < 0) {
 		panic("sys_page_map: %e", r);
 	}
@@ -93,23 +92,22 @@ duppage(envid_t envid, unsigned pn)
 //   Neither user exception stack should ever be marked copy-on-write,
 //   so you must allocate a new page for the child's user exception stack.
 //
+extern void _pgfault_upcall(void);
+
 envid_t
 fork(void)
 {
 	// LAB 4: Your code here.
 	envid_t envid;
-	// pte_t pte, pde;
 	int r = 0;
-	envid = sys_exofork();
 	set_pgfault_handler(pgfault);
-	
+	envid = sys_exofork();
 	if (envid < 0) 
 		panic("sys_exofork: %e", envid);
 	if (envid == 0) {
 		thisenv = &envs[ENVX(sys_getenvid())];
 		return 0;
 	}
-// cprintf("envid %d and getenvid %d in fork\n", envid, sys_getenvid());
 	for (int i = PGNUM(UTEXT); i < PGNUM(USTACKTOP); i++) {
 		// 不能用 pte 接收？ 我猜是因为定义uvpt 的时候是 extern volatile pte_t uvpt[]; 所以要显式的给索引i
 		// pde = uvpd[i >> 10];
@@ -127,7 +125,7 @@ fork(void)
 	// 为什么是envid, 因为 envid 是子进程的id啊 整晕了
 	if ((r = sys_page_alloc(envid, (void*) (UXSTACKTOP - PGSIZE), PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);
-	extern void _pgfault_upcall(void);
+
 	if ((r = sys_env_set_pgfault_upcall(envid, _pgfault_upcall)) < 0) 
 		panic("fork: sys_env_set_pgfault_upcall failed, %e", r);
 	if ((r = sys_env_set_status(envid, ENV_RUNNABLE)) < 0)

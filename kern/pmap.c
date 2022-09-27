@@ -351,12 +351,12 @@ page_init(void)
 				pages[i].pp_ref = 1;
 				pages[i].pp_link = NULL;
 				continue;
+			} else {
+				// cprintf("i:%d in page_init i >= 1 && i < npages_basemem\n", i);
+				pages[i].pp_ref = 0;
+				pages[i].pp_link = page_free_list;
+				page_free_list = &pages[i];
 			}
-			// cprintf("i:%d in page_init i >= 1 && i < npages_basemem\n", i);
-
-			pages[i].pp_ref = 0;
-			pages[i].pp_link = page_free_list;
-			page_free_list = &pages[i];
 		}
 		else if (i >= (IOPHYSMEM / PGSIZE) && i < (EXTPHYSMEM / PGSIZE)) {
 			// cprintf("i:%d in page_init i >= (IOPHYSMEM / PGSIZE) && i < (EXTPHYSMEM / PGSIZE)\n", i);

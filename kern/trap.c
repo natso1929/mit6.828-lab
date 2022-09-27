@@ -91,6 +91,24 @@ trap_init(void)
  void handler_simderr();
  void handler_syscall();
  void handler_default();
+
+ void irq_0_handler();
+ void irq_1_handler();
+ void irq_2_handler();
+ void irq_3_handler();
+ void irq_4_handler();
+ void irq_5_handler();
+ void irq_6_handler();
+ void irq_7_handler();
+ void irq_8_handler();
+ void irq_9_handler();
+ void irq_10_handler();
+ void irq_11_handler();
+ void irq_12_handler();
+ void irq_13_handler();
+ void irq_14_handler();
+ void irq_15_handler();
+
 	SETGATE(idt[T_DIVIDE], 0, GD_KT, handler_divide, 0);
 	SETGATE(idt[T_DEBUG], 0, GD_KT, handler_debug, 0);
 	SETGATE(idt[T_NMI], 0, GD_KT, handler_nmi, 0);
@@ -111,6 +129,23 @@ trap_init(void)
 	SETGATE(idt[T_SIMDERR], 0, GD_KT, handler_simderr, 0);
 	SETGATE(idt[T_SYSCALL], 0, GD_KT, handler_syscall, 3);
 	SETGATE(idt[T_DEFAULT], 0, GD_KT, handler_default, 0);
+
+SETGATE(idt[IRQ_OFFSET + 0],  0, GD_KT, irq_0_handler,  0);
+SETGATE(idt[IRQ_OFFSET + 1],  0, GD_KT, irq_1_handler,  0);
+SETGATE(idt[IRQ_OFFSET + 2],  0, GD_KT, irq_2_handler,  0);
+SETGATE(idt[IRQ_OFFSET + 3],  0, GD_KT, irq_3_handler,  0);
+SETGATE(idt[IRQ_OFFSET + 4],  0, GD_KT, irq_4_handler,  0);
+SETGATE(idt[IRQ_OFFSET + 5],  0, GD_KT, irq_5_handler,  0);
+SETGATE(idt[IRQ_OFFSET + 6],  0, GD_KT, irq_6_handler,  0);
+SETGATE(idt[IRQ_OFFSET + 7],  0, GD_KT, irq_7_handler,  0);
+SETGATE(idt[IRQ_OFFSET + 8],  0, GD_KT, irq_8_handler,  0);
+SETGATE(idt[IRQ_OFFSET + 9],  0, GD_KT, irq_9_handler,  0);
+SETGATE(idt[IRQ_OFFSET + 10], 0, GD_KT, irq_10_handler, 0);
+SETGATE(idt[IRQ_OFFSET + 11], 0, GD_KT, irq_11_handler, 0);
+SETGATE(idt[IRQ_OFFSET + 12], 0, GD_KT, irq_12_handler, 0);
+SETGATE(idt[IRQ_OFFSET + 13], 0, GD_KT, irq_13_handler, 0);
+SETGATE(idt[IRQ_OFFSET + 14], 0, GD_KT, irq_14_handler, 0);
+SETGATE(idt[IRQ_OFFSET + 15], 0, GD_KT, irq_15_handler, 0);
 
 	// 就很奇怪 
 	// void divide_error();
@@ -189,7 +224,8 @@ trap_init_percpu(void)
 	// LAB 4: Your code here:
 	struct Taskstate *this_ts = &thiscpu->cpu_ts;
 	uint8_t cpu_idx = thiscpu->cpu_id;
-	this_ts->ts_esp0 = KSTACKTOP - cpu_idx * (KSTKSIZE + KSTKGAP);
+	// this_ts->ts_esp0 = KSTACKTOP - cpu_idx * (KSTKSIZE + KSTKGAP);
+	this_ts->ts_esp0 = (uintptr_t)percpu_kstacks[cpunum()];
 	this_ts->ts_ss0 = GD_KD;
 	this_ts->ts_iomb = sizeof(struct Taskstate);
 	gdt[(GD_TSS0 >> 3) + cpu_idx] = SEG16(STS_T32A, (uint32_t) (this_ts),
@@ -280,7 +316,11 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
-
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
+		lapic_eoi();
+		sched_yield();
+		return;
+	}
 	// Unexpected trap: The user process or the kernel has a bug.
 	if (tf->tf_trapno == T_PGFLT) {
 		page_fault_handler(tf);
@@ -299,11 +339,8 @@ trap_dispatch(struct Trapframe *tf)
 				tf->tf_regs.reg_edi,
 				tf->tf_regs.reg_esi
 				);
-		// cprintf("eax %d\n", tf->tf_regs.reg_eax);
-		// cprintf("status %d\n", curenv->env_status);
 		return ;
 	}
-// cprintf("curenv %p and env_status %p in dispatch\n", curenv, curenv->env_status);
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
 		panic("unhandled trap in kernel");
@@ -321,7 +358,7 @@ void trap(struct Trapframe *tf)
 	// of GCC rely on DF being clear
 	asm volatile("cld" ::
 					 : "cc");
-
+	
 	// Halt the CPU if some other CPU has called panic()
 	extern char *panicstr;
 	if (panicstr)
@@ -422,33 +459,38 @@ void page_fault_handler(struct Trapframe *tf)
 	// struct UTrapframe utf;
 // cprintf("utf size %p\n", sizeof(struct UTrapframe));
 // cprintf("curenupcall %p\n", curenv->env_pgfault_upcall);
+	uintptr_t curtop;
 	if (curenv->env_pgfault_upcall) {
-		uintptr_t curtop = UXSTACKTOP;
 		if (tf->tf_esp >= (UXSTACKTOP - PGSIZE) && tf->tf_esp < UXSTACKTOP) {
-			curtop =  curenv->env_tf.tf_esp;
+			curtop =  curenv->env_tf.tf_esp - 4;
+		} else {
+			curtop = UXSTACKTOP;
 		}
-		uintptr_t size = sizeof(struct UTrapframe) + sizeof(uintptr_t);
-// cprintf("faultva %p\n", fault_va);
-		user_mem_assert(curenv, (void *)curtop - size, size, PTE_P | PTE_W);
-		*((uintptr_t *)(curtop) - 1) = 0;
-		*((uintptr_t *)(curtop) - 2) = tf->tf_esp;
-		*((uintptr_t *)(curtop) - 3) = tf->tf_eflags;
-		*((uintptr_t *)(curtop) - 4) = tf->tf_eip;
-		*((uintptr_t *)(curtop) - 5) = tf->tf_regs.reg_eax;
-		*((uintptr_t *)(curtop) - 6) = tf->tf_regs.reg_ecx;
-		*((uintptr_t *)(curtop) - 7) = tf->tf_regs.reg_edx;
-		*((uintptr_t *)(curtop) - 8) = tf->tf_regs.reg_ebx;
-		*((uintptr_t *)(curtop) - 9) = tf->tf_regs.reg_oesp;
-		*((uintptr_t *)(curtop) - 10) = tf->tf_regs.reg_ebp;
-		*((uintptr_t *)(curtop) - 11) = tf->tf_regs.reg_esi;
-		*((uintptr_t *)(curtop) - 12) = tf->tf_regs.reg_edi;
-		*((uintptr_t *)(curtop) - 13) = tf->tf_err;
-		*((uintptr_t *)(curtop) - 14) = fault_va;
-// cprintf("*((uintptr_t *)(curtop) - 14) %p\n",*((uintptr_t *)(curtop) - 14));
-		curenv->env_tf.tf_esp = (uintptr_t)((uintptr_t *)(curtop) - 14);
-
+		uintptr_t size = sizeof(struct UTrapframe);
+		user_mem_assert(curenv, (void *)(curtop - size), size,  PTE_W);
+		struct UTrapframe* utf = (struct UTrapframe *)(curtop - size);
+		utf->utf_eflags = tf->tf_eflags;
+		utf->utf_eip = tf->tf_eip;
+		utf->utf_err = tf->tf_err;
+		utf->utf_esp = tf->tf_esp;
+		utf->utf_fault_va = fault_va;
+		utf->utf_regs = tf->tf_regs;
+		// *((uintptr_t *)(curtop) - 1) = 0;
+		// *((uintptr_t *)(curtop) - 2) = tf->tf_esp;
+		// *((uintptr_t *)(curtop) - 3) = tf->tf_eflags;
+		// *((uintptr_t *)(curtop) - 4) = tf->tf_eip;
+		// *((uintptr_t *)(curtop) - 5) = tf->tf_regs.reg_eax;
+		// *((uintptr_t *)(curtop) - 6) = tf->tf_regs.reg_ecx;
+		// *((uintptr_t *)(curtop) - 7) = tf->tf_regs.reg_edx;
+		// *((uintptr_t *)(curtop) - 8) = tf->tf_regs.reg_ebx;
+		// *((uintptr_t *)(curtop) - 9) = tf->tf_regs.reg_oesp;
+		// *((uintptr_t *)(curtop) - 10) = tf->tf_regs.reg_ebp;
+		// *((uintptr_t *)(curtop) - 11) = tf->tf_regs.reg_esi;
+		// *((uintptr_t *)(curtop) - 12) = tf->tf_regs.reg_edi;
+		// *((uintptr_t *)(curtop) - 13) = tf->tf_err;
+		// *((uintptr_t *)(curtop) - 14) = fault_va;
+		curenv->env_tf.tf_esp = (uintptr_t)(utf);
 		curenv->env_tf.tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
-// cprintf("envupcall %p \n", curenv->env_pgfault_upcall);
 		// 应该不用这个函数指针，大概是使用env_run来调用
 		// uint32_t fn = curenv->env_pgfault_upcall;
 		// (((void (*)(UTrapframe))fn)(utf);
