@@ -14,7 +14,6 @@ umain(int argc, char **argv)
 		while (1)
 			/* do nothing */;
 	}
-
 	cprintf("I am the parent.  Running the child...\n");
 	sys_yield();
 	sys_yield();
