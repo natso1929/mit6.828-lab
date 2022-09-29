@@ -316,7 +316,14 @@ trap_dispatch(struct Trapframe *tf)
 
 	// Handle keyboard and serial interrupts.
 	// LAB 5: Your code here.
-
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_KBD) {
+		kbd_intr();
+		return;
+	}
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_SERIAL) {
+		serial_intr();
+		return;
+	}
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
@@ -468,7 +475,7 @@ void page_fault_handler(struct Trapframe *tf)
 		if (tf->tf_esp >= (UXSTACKTOP - PGSIZE) && tf->tf_esp < UXSTACKTOP) {
 			curtop =  curenv->env_tf.tf_esp - 4;
 		} else {
-			curtop = UXSTACKTOP;
+			curtop = UXSTACKTOP - 4;
 		}
 		uintptr_t size = sizeof(struct UTrapframe);
 		user_mem_assert(curenv, (void *)(curtop - size), size,  PTE_W);

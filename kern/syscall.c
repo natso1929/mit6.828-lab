@@ -134,7 +134,17 @@ sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
 	// LAB 5: Your code here.
 	// Remember to check whether the user has supplied us with a good
 	// address!
-	panic("sys_env_set_trapframe not implemented");
+	struct Env *env;
+	// 1 or 0 ?
+	if(envid2env(envid, &env, 1) < 0) {
+		return -E_BAD_ENV;
+	}
+	tf->tf_cs |= 0x3;
+	tf->tf_eflags |= FL_IF;
+	tf->tf_eflags &= (~FL_IOPL_MASK);
+	env->env_tf = *tf;
+	// user_mem_check(env, env->env_ipc_dstva, PGSIZE, PTE_P | PTE_U |PTE_W);
+	return 0;
 }
 
 // Set the page fault upcall for 'envid' by modifying the corresponding struct
@@ -339,26 +349,32 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 	struct PageInfo *p;
 	struct Env * dstenv;
 	pte_t * pte;
+	int r;
 	if (envid2env(envid, &dstenv, 0) < 0) 
 		return -E_BAD_ENV;
 	if (!dstenv->env_ipc_recving)
 		return -E_IPC_NOT_RECV;
-	if (srcva < (void *)UTOP && PGOFF(srcva))
-		return -E_INVAL;
-	if (srcva < (void *)UTOP && (!(perm & PTE_U) 
-		|| !(perm & PTE_P) ||(perm & (~PTE_SYSCALL))))
-		return -E_INVAL;
-	if (((p = page_lookup(curenv->env_pgdir, srcva, &pte)) < 0)  && srcva < (void *)UTOP)
-		return -E_INVAL;
-	if (!(*pte & PTE_W) && (perm & PTE_W))
-		return -E_INVAL;
-	// 这里为啥是srcva
+	// 注意 srcva 大于utop的时候也会传value 但不会map 
+	dstenv->env_ipc_perm = 0;
 	if (srcva < (void *)UTOP) {
-		if (page_insert(dstenv->env_pgdir, p, dstenv->env_ipc_dstva, perm) < 0) 
-			return  -E_NO_MEM;
-		dstenv->env_ipc_perm = perm;
-	}else {
-		dstenv->env_ipc_perm = 0;
+		if (PGOFF(srcva))
+			return -E_INVAL;
+		if ((!(perm & PTE_U) 
+			|| !(perm & PTE_P) ||(perm & (~PTE_SYSCALL))))
+			return -E_INVAL;
+		if (((p = page_lookup(curenv->env_pgdir, srcva, &pte)) < 0))
+			return -E_INVAL;
+		if (!(*pte & PTE_W) && (perm & PTE_W))
+			return -E_INVAL;
+		// 这里为啥是srcva
+		if (dstenv->env_ipc_dstva < (void *)UTOP) {
+// cprintf("here %p \n", curenv->env_id);
+			r = page_insert(dstenv->env_pgdir, p, dstenv->env_ipc_dstva, perm);
+			if (r) {
+				return  -E_NO_MEM;
+			} 
+			dstenv->env_ipc_perm = perm;
+		}
 	}
 	dstenv->env_ipc_recving = 0;
 	dstenv->env_ipc_from = curenv->env_id;
@@ -392,12 +408,8 @@ sys_ipc_recv(void *dstva)
 		return -E_BAD_ENV;
 	if (dstva < (void *)UTOP && PGOFF(dstva))
 		return -E_INVAL;
-	// if (dstva < (void *)UTOP) {
-		env->env_ipc_dstva = dstva;
-	// } 
+	env->env_ipc_dstva = dstva;
 	env->env_status = ENV_NOT_RUNNABLE;
-	// while (!env->env_ipc_value);
-// cprintf("here child in syscall\n");
 	env->env_ipc_recving = 1;
 	sched_yield();
 	return 0;
@@ -451,6 +463,8 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			return sys_ipc_try_send((envid_t)a1, (uint32_t)a2, (void *)a3, (unsigned int)a4);
 		case NSYSCALLS:
 			return 0;
+		case SYS_env_set_trapframe:
+			return sys_env_set_trapframe((envid_t)a1, (struct Trapframe *)a2);
 
 		default:
 			return -E_INVAL;

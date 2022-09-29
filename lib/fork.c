@@ -27,8 +27,10 @@ pgfault(struct UTrapframe *utf)
 	// LAB 4: Your code here.
 	// pde 不能用 uvpd[PDX(addr)]
 	// pte_t pde = uvpd[PDX(addr)];
-	if(!((err & FEC_WR) && (uvpt[PGNUM(addr)] & PTE_COW)))
+cprintf("uvpt[PGNUM(addr)] %p uvpd[PDX(addr)] %p\n", uvpt[PGNUM(addr)], uvpd[PDX(addr)]);	
+	if(uvpd[PDX(addr)] &PTE_P && !((err & FEC_WR) && (uvpt[PGNUM(addr)] & PTE_COW))) {
 		panic("fault page is not write or copy-on-write page");
+	}
 	// Allocate a new page, map it at a temporary location (PFTEMP),
 	// copy the data from the old page to the new page, then move the new
 	// page to the old page's address.
@@ -63,16 +65,27 @@ duppage(envid_t envid, unsigned pn)
 	int r;
 	// LAB 4: Your code here.
 	pte_t pte = uvpt[pn];
-	if ((pte & PTE_W) || (pte & PTE_COW)) {
-		pte &= ~PTE_W;
-		pte |= PTE_COW;
+	void * addr = (void *)(pn * PGSIZE);
+
+	uint32_t perm = pte & PTE_SYSCALL;
+	if (perm & PTE_SHARE) {
+		r = sys_page_map(0, (void *)addr, envid, (void *)addr, perm &  PTE_SYSCALL);
+		if (r != 0)
+			return r;
 	}
-	if ((r = sys_page_map(0, (void *)(pn * PGSIZE), envid, (void *)(pn * PGSIZE), PTE_COW |PTE_P |PTE_U)) < 0) {
-		panic("sys_page_map: %e", r);
+	else if ((perm & PTE_W) || (perm & PTE_COW)) {
+			perm &= ~PTE_W;
+			perm |= PTE_COW;
+cprintf("perm %p\n", perm);
+		if((r = sys_page_map(0, addr, envid, addr, perm & PTE_SYSCALL))<0)
+			panic("duppage: %e", r);
+		// 0, 0 更新权限
+		if((r = sys_page_map(0, addr, 0, addr, perm & PTE_SYSCALL))<0)
+			panic("duppage: %e", r);
+	} else {
+		if ((r = sys_page_map(0, (void *)(pn * PGSIZE), envid, (void *)(pn * PGSIZE), perm & PTE_SYSCALL)) < 0) 
+	 		panic("sys_page_map: %e", r);
 	}
-	// 为什么是0， 0，  就是简单的更新一下 特权
-	if ((r = sys_page_map(0, (void *)(pn * PGSIZE), 0, (void *)(pn * PGSIZE), PTE_COW |PTE_P |PTE_U)) < 0) 
-		panic("sys_page_map: %e", r);
 	return 0;
 }
 
@@ -100,6 +113,7 @@ fork(void)
 	// LAB 4: Your code here.
 	envid_t envid;
 	int r = 0;
+	uint8_t * addr;
 	set_pgfault_handler(pgfault);
 	envid = sys_exofork();
 	if (envid < 0) 
@@ -108,20 +122,25 @@ fork(void)
 		thisenv = &envs[ENVX(sys_getenvid())];
 		return 0;
 	}
-	for (int i = PGNUM(UTEXT); i < PGNUM(USTACKTOP); i++) {
-		// 不能用 pte 接收？ 我猜是因为定义uvpt 的时候是 extern volatile pte_t uvpt[]; 所以要显式的给索引i
-		// pde = uvpd[i >> 10];
-		// pte = uvpt[i];
-		if ((uvpd[i >> 10] & PTE_P) && (uvpt[i] & PTE_P)) {
-			if (uvpt[i] & (PTE_W | PTE_COW)) {
-				if ((r = duppage(envid, i)) < 0) 
-					panic("duppage: %e", r);
-			}else {
-				if ((r = sys_page_map(0, (void *)(i * PGSIZE), envid, (void *)(i * PGSIZE), PTE_U |PTE_P)) < 0) 
-					panic("sys_page_map: %e", r);
-			}
-		}
-	}	
+	for(addr = (uint8_t *)UTEXT; addr <(uint8_t *)USTACKTOP; addr += PGSIZE)
+		if((uvpd[PDX(addr)] & PTE_P) && (uvpt[PGNUM(addr)] & PTE_P))
+			duppage(envid, PGNUM(addr));
+	//929 
+	// for (int i = PGNUM(UTEXT); i < PGNUM(USTACKTOP); i++) {
+	// 	// 不能用 pte 接收？ 我猜是因为定义uvpt 的时候是 extern volatile pte_t uvpt[]; 所以要显式的给索引i
+	// 	// pde = uvpd[i >> 10];
+	// 	// pte = uvpt[i];
+	// 	if ((uvpd[i >> 10] & PTE_P) && (uvpt[i] & PTE_P)) {
+	// 		if (uvpt[i] & (PTE_W | PTE_COW)) {
+	// 			if ((r = duppage(envid, i)) < 0) 
+	// 				panic("duppage: %e", r);
+	// 		}
+	// 		// else {
+	// 		// 	if ((r = sys_page_map(0, (void *)(i * PGSIZE), envid, (void *)(i * PGSIZE), PTE_U |PTE_P)) < 0) 
+	// 		// 		panic("sys_page_map: %e", r);
+	// 		// }
+	// 	}
+	// }	
 	// 为什么是envid, 因为 envid 是子进程的id啊 整晕了
 	if ((r = sys_page_alloc(envid, (void*) (UXSTACKTOP - PGSIZE), PTE_P|PTE_U|PTE_W)) < 0)
 		panic("sys_page_alloc: %e", r);

@@ -67,6 +67,7 @@ ipc_send(envid_t to_env, uint32_t val, void *pg, int perm)
 			r = sys_ipc_try_send(to_env, val, (void *)(UTOP), perm );
 		}
 		if (r != 0 && r != -E_IPC_NOT_RECV) {
+cprintf("r %d\n", r);
 			panic("Attempt to send to env that is not recving");
 		}
 		sys_yield();

@@ -62,7 +62,15 @@ alloc_block(void)
 	// super->s_nblocks blocks in the disk altogether.
 
 	// LAB 5: Your code here.
-	panic("alloc_block not implemented");
+	uint32_t blockno = 1;
+	while (blockno < super->s_nblocks) {
+		if (block_is_free(blockno)) {
+			bitmap[blockno/32] &= ~(1<<(blockno%32));
+			flush_block(&bitmap[blockno/32]);
+			return blockno;
+		}
+		blockno++;
+	}
 	return -E_NO_DISK;
 }
 
@@ -134,8 +142,32 @@ fs_init(void)
 static int
 file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool alloc)
 {
-       // LAB 5: Your code here.
-       panic("file_block_walk not implemented");
+	// LAB 5: Your code here.
+	// 我擦指针又错了 参考pmap.c page_lookup 这个得理解一下，双指针 存放指针
+	uint32_t *fileblockno;
+	int r;
+	if (filebno < NDIRECT) {
+		fileblockno = &f->f_direct[filebno];
+	} else if (filebno < NDIRECT + NINDIRECT) {
+		if (!(f->f_indirect)) {
+			if (!alloc)
+				return -E_NOT_FOUND;
+			r = alloc_block();
+			if (r < 0)
+				return -E_NO_DISK;
+			memset(diskaddr(r), 0, PGSIZE);
+			f->f_indirect = r;
+		}
+		// indirect 里面存的是 blockno 所以要diskaddr转虚拟地址 
+		// fileblockno = *((uint32_t *)f->f_indirect + filebno - 10);
+		uint32_t * indirect = (uint32_t *) diskaddr(f->f_indirect);
+		fileblockno = &indirect[filebno - NDIRECT];
+	} else {
+		return -E_INVAL;
+	}
+	*ppdiskbno = fileblockno;
+	return 0;
+
 }
 
 // Set *blk to the address in memory where the filebno'th
@@ -149,8 +181,21 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 int
 file_get_block(struct File *f, uint32_t filebno, char **blk)
 {
-       // LAB 5: Your code here.
-       panic("file_get_block not implemented");
+    // LAB 5: Your code here.
+	int r;
+	uint32_t * ppdiskbno;
+	if ((r = file_block_walk(f, filebno, &ppdiskbno, 1)) < 0) {
+		return r;
+	}
+	if (*ppdiskbno == 0) {
+		r = alloc_block();
+		if (r < 0)
+			return r;
+		*ppdiskbno = r;
+	}
+	*blk = diskaddr(*ppdiskbno);
+	flush_block(diskaddr(*ppdiskbno));
+	return 0;
 }
 
 // Try to find a file named "name" in dir.  If so, set *file to it.
