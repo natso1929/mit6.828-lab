@@ -207,9 +207,9 @@ mem_init(void)
 	// page_insert(kern_pgdir, pages, (uint32_t *)UPAGES, PTE_U |PTE_P);
    	boot_map_region(kern_pgdir, 
                     UPAGES, 
-                     npages * sizeof(struct PageInfo),
+                     PTSIZE,
                     PADDR(pages), 
-                    (PTE_U | PTE_P));
+                    (PTE_U));
 	//////////////////////////////////////////////////////////////////////
 	// Map the 'envs' array read-only by the user at linear address UENVS
 	// (ie. perm = PTE_U | PTE_P).
@@ -217,7 +217,7 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
-	boot_map_region(kern_pgdir, UENVS, NENV * sizeof(struct Env), PADDR(envs), (PTE_U | PTE_P));
+	boot_map_region(kern_pgdir, UENVS, PTSIZE, PADDR(envs), (PTE_U));
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -231,7 +231,7 @@ mem_init(void)
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
 	// cprintf("bootstack %p and bootstacktop %p\n",PADDR(bootstack), PADDR( bootstacktop));
-	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_P | PTE_W);
+	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W);
 	
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
@@ -241,7 +241,7 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
-	boot_map_region(kern_pgdir, KERNBASE, ROUNDUP((0xFFFFFFFF- KERNBASE), PGSIZE), 0, PTE_P | PTE_W);
+	boot_map_region(kern_pgdir, KERNBASE, 0xffffffff- KERNBASE, 0, PTE_W);
 	
 
 	// Initialize the SMP-related parts of the memory map
@@ -298,7 +298,7 @@ mem_init_mp(void)
 						KSTACKTOP - i * (KSTKSIZE + KSTKGAP) - KSTKSIZE,
 						KSTKSIZE,
 						PADDR(percpu_kstacks[i]),
-						PTE_W | PTE_P);
+						PTE_W );
 	}
 }
 
@@ -574,21 +574,13 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	if ((pte = pgdir_walk(pgdir, va, 1)) == NULL) {
 		return -E_NO_MEM; 	
 	}
-
+	pp->pp_ref++;
 	if (*pte & PTE_P) {
-		if (PTE_ADDR(*pte) == page2pa(pp)) {
-			// 巧妙 pte 后12位 是标志位非常重要一定要清零再赋权
-			// *pte = *pte | perm | PTE_P;
-			*pte = PTE_ADDR(*pte) | perm |PTE_P;
-			return 0;
-		} else 
-		{
-			page_remove(pgdir, va);
+		page_remove(pgdir, va);
 			// tlb_invalidate(pgdir,va);
-		}
 	}
 	*pte = page2pa(pp) | perm  | PTE_P; 
-	pp->pp_ref++;
+	pgdir[PDX(va)] |= perm;
 	
 	// // If allocation is successful, increase the pp_ref first.
 	// // By doing this before page_remove, we can handle the situation that
@@ -600,7 +592,6 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	// }
 	// // Modify permission flags, page directory is also needed
 	// *pte = page2pa(pp) | perm | PTE_P;
-	// *(pgdir + PDX(va)) |= perm;
 
 	return 0;
 }
@@ -624,6 +615,9 @@ page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
 	if ((pte = pgdir_walk(pgdir, va, 0)) == NULL) {
 		return NULL;
 	}
+	//  lab5 shell 缺了这个判断一直过不了，晕了, 逆天！
+	if (!(*pte & PTE_P))
+		return NULL;
 // cprintf("here\n");
 	physaddr_t ph = PTE_ADDR(*pte);
 	if (pte_store) {

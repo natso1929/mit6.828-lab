@@ -362,7 +362,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 		if ((!(perm & PTE_U) 
 			|| !(perm & PTE_P) ||(perm & (~PTE_SYSCALL))))
 			return -E_INVAL;
-		if (((p = page_lookup(curenv->env_pgdir, srcva, &pte)) < 0))
+		if (((p = page_lookup(curenv->env_pgdir, srcva, &pte)) == NULL))
 			return -E_INVAL;
 		if (!(*pte & PTE_W) && (perm & PTE_W))
 			return -E_INVAL;
