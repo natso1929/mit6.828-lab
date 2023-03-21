@@ -20,6 +20,7 @@ MIT 6.828(Operating System Engineering) Lab Report
 | Exercises      | Passed       | 2022/06/01 |
 | Challenge 1    | Passed | 2022/06/14 |
 
+![image-20230321123005345](assets/lab1.png)
 
 ### lab2: Memory Management
 
@@ -33,6 +34,7 @@ MIT 6.828(Operating System Engineering) Lab Report
 | Challenge 3    | NA           | NA		   |
 | Challenge 4    | NA           | NA		   |
 
+![image-20230321122922370](assets/lab2.png)
 
 ### lab3: User Environments
 
@@ -43,6 +45,8 @@ MIT 6.828(Operating System Engineering) Lab Report
 | Challenge 1    | NA   | NA |
 | Challenge 2    | NA           | NA		   |
 | Challenge 3    | NA           | NA		   |
+
+![image-20220919163949483](assets/lab3.png)
 
 ### lab4: Preemptive Multitasking
 
@@ -56,12 +60,15 @@ MIT 6.828(Operating System Engineering) Lab Report
 | Challenge 3    | NA           | NA		   |
 | Challenge 4    | NA           | NA		   |
 
+![image-20220927135009913](assets/lab4.png)
+
 ### lab5: File System, Spawn and Shell
 
 | Requirement 	 | Status       | Date         |
 | :-------------:| :----------: | :----------: |
 | Exercises      | Passed       | 2022/08/28 |
 
+![lab5](assets/lab5.png)
 
 ### lab6: Network Driver
 
